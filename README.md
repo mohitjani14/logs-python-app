@@ -8,7 +8,9 @@ It supports filtering logs by date and automatically zips large files before sen
 ## ⚙️ Requirements
 
 Python 3.10+ (recommended: 3.11 or 3.12)
+
 pip (Python package manager)
+
 SSH key access to target servers (passwordless preferred)
 
 
@@ -117,6 +119,7 @@ GET /download?project=MyApp&module=backend&date=2025-11-01
 ### Optional parameters:
 
 date → Filter by date (e.g., 2025-11-01 or 01-11-2025)
+
 ssh_user → Override SSH user (if different from config)
 
  
