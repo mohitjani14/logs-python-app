@@ -64,11 +64,11 @@ Here’s an example:
 ```
 
 ### Tags:
-name → project/module name
-path → directory on remote server
-base → log filename prefix (e.g., module-01-11-2025.log)
-host → SSH hostname or IP
-user → SSH username
+##### name → project/module name
+##### path → directory on remote server
+##### base → log filename prefix (e.g., module-01-11-2025.log)
+##### host → SSH hostname or IP
+##### user → SSH username
 
 
 
