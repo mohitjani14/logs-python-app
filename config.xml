@@ -1,0 +1,14 @@
+  <!-- ========================= -->
+  <!-- Project 2: TEST          -->
+  <!-- ========================= -->
+  <project name="Project">
+    <module
+      name="module"
+      host="IP"
+      user="mohit"
+      key="/home/mohit/.ssh/id_rsa"
+      path="/project/module/logs"
+      base="test"
+      pattern="test*.log"
+    />
+  </project>
