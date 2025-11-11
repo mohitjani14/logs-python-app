@@ -100,39 +100,51 @@ def sftp_connect(host, username, password, timeout=30):
         activity_logger.error(f"SFTP connection failed for {username}@{host}: {e}")
         raise
 
+# ========================================================
+## Find Logs
 
 def sftp_find_latest_log(sftp, dirpath, base, date_str=None):
-    """Find latest or date-specific log file on remote SFTP server."""
-    files = sftp.listdir(dirpath)
+    """
+    Find log file on remote SFTP server (same logic as SSH version):
+    - If date_str provided: match APP-<date>.log* exactly (no date parsing)
+    - If no date_str: prefer APP.log if exists; else pick latest APP-*.log*
+    """
+    try:
+        files = sftp.listdir(dirpath)
+    except Exception as e:
+        raise RuntimeError(f"Unable to list directory {dirpath}: {e}")
+
     if not files:
         return None
 
-    def safe_parse_date(date_str):
-        for fmt in ("%Y-%m-%d", "%d-%m-%Y", "%Y/%m/%d", "%d/%m/%Y"):
-            try:
-                return datetime.strptime(date_str, fmt).date()
-            except ValueError:
-                continue
-        try:
-            d = dateparser.parse(date_str)
-            if d:
-                return d.date()
-        except Exception:
-            pass
-        raise ValueError("Invalid date format. Use YYYY-MM-DD or DD-MM-YYYY.")
-
+    # --- CASE 1: If user provided date, find APP-<date>.log* ---
     if date_str:
-        d = safe_parse_date(date_str)
-        date_part = d.strftime("%d-%m-%Y")
-        candidates = [f for f in files if f.startswith(f"{base}-{date_part}.log")]
-    else:
-        candidates = [f for f in files if f.startswith(base) and f.endswith(".log")]
+        pattern_prefix = f"{base}-{date_str}.log"
+        candidates = [f for f in files if f.startswith(pattern_prefix)]
+        if not candidates:
+            return None
+        candidates.sort(
+            key=lambda f: sftp.stat(os.path.join(dirpath, f)).st_mtime,
+            reverse=True
+        )
+        return os.path.join(dirpath, candidates[0])
 
+    # --- CASE 2: No date → prefer APP.log ---
+    live_log = f"{base}.log"
+    if live_log in files:
+        return os.path.join(dirpath, live_log)
+
+    # Otherwise, fallback to latest APP-*.log*
+    candidates = [f for f in files if f.startswith(f"{base}-") and ".log" in f]
     if not candidates:
         return None
 
-    candidates.sort(key=lambda f: sftp.stat(os.path.join(dirpath, f)).st_mtime, reverse=True)
+    candidates.sort(
+        key=lambda f: sftp.stat(os.path.join(dirpath, f)).st_mtime,
+        reverse=True
+    )
     return os.path.join(dirpath, candidates[0])
+
 
 # ==========================================================
 # ROUTES
@@ -185,6 +197,8 @@ def download_log():
     try:
         sftp, transport = sftp_connect(host, username, password)
         remote_file = sftp_find_latest_log(sftp, dirpath, base, date)
+        if remote_file:
+            log.info(f"Selected remote file: {remote_file}")
     except ValueError as e:
         activity_logger.error(f"Invalid date format from {client_ip}: {e}")
         return jsonify({"error": str(e)}), 400
@@ -209,6 +223,8 @@ def download_log():
     try:
         sftp, transport = sftp_connect(host, username, password)
         sftp.get(remote_file, local_temp)
+        filesize = os.path.getsize(local_temp)
+        log.info(f"Downloaded {filename} ({filesize / 1024 / 1024:.2f} MB)")
         activity_logger.info(f"Downloaded {filename} for {project}/{module} by {client_ip}")
     except Exception as e:
         log.exception("SFTP download failed")
@@ -221,6 +237,7 @@ def download_log():
         except Exception:
             pass
 
+    # Compress large logs
     if os.path.getsize(local_temp) > MAX_ZIP_MB * 1024 * 1024:
         zip_path = shutil.make_archive(local_temp, 'zip',
                                        root_dir=os.path.dirname(local_temp),
@@ -239,7 +256,6 @@ def download_log():
                 os.remove(to_send)
         except Exception:
             pass
-
 
 # ==========================================================
 # ENTRY POINT
